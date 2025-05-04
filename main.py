@@ -16,14 +16,16 @@ robot = robot.Robot(100, 100)
 
 while running:
 
-    time.sleep(1/120)
+    time.sleep(1/60)
 
     screen.fill("black")
 
     if pygame.key.get_pressed()[pygame.K_LEFT]:
-        robot.l_advance(math.pi/16)
+        robot.l_accel(.01)
     if pygame.key.get_pressed()[pygame.K_RIGHT]:
-        robot.r_advance(math.pi/16)
+        robot.r_accel(.01)
+        
+    robot.apply_advances()
 
     pygame.draw.line(screen, "white",
                      robot.lwheel_pos(), robot.rwheel_pos(), 5)
