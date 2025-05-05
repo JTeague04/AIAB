@@ -24,16 +24,20 @@ class Wheel:
 class Robot:
 
     def __init__(self, x, y, sensor_count=16, width=50, drag=1.1, max_speed=.1):
-        self.__width = width
         w2 = width /2
-        
         self.__lwheel = Wheel(x-w2, y, drag, max_speed)
         self.__rwheel = Wheel(x+w2, y, drag, max_speed)
         
         self.__sensor_count = sensor_count
+        self.__width = width
 
     def getx(self):
         return (self.__lwheel.pos[0] +self.__rwheel.pos[0])/2
+    
+    def force_pos(self, x, y):
+        w2 = self.__width /2
+        self.__lwheel.pos = [x-w2, y]
+        self.__rwheel.pos = [x+w2, y]
     
     def collide(self):
         self.__lwheel.speed = 0
