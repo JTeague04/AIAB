@@ -91,7 +91,7 @@ while running:
     rewards = []
     end_sim = False
 
-    for i in range(2000):
+    for i in range(5000):
         if (not running) or end_sim: continue
 
         screen.fill("black")
