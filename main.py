@@ -11,7 +11,7 @@ display_x, display_y = 1600, 1000
 cell_size = 50
 
 screen = pygame.display.set_mode((display_x, display_y))
-robot = robot.Robot(50, display_y/2, width=25, sensor_count = 32)
+robot = robot.Robot(50, 50, width=25, sensor_count = 4)
 
 def new_course():
     course = []
@@ -61,12 +61,28 @@ def raycast(agent, s_int = 10, max_dist = 600): # search_interval should be < mi
                         or not (0 <= search_pos[1] <= display_y)):
                     
                     searching = False
-                    pygame.draw.rect(screen, "blue", search_pos+(10, 10))
+                    pygame.draw.rect(screen, "blue",
+                                     (search_pos[0]-5, search_pos[1]-5, 10, 10))
                     
         dists[i] = dist/max_dist
 
     return dists
 
+def fitness(robot):
+    # Reward x-progress
+    fitness = ((robot.getx()-50)/ display_x)
+
+    # Reward velocity
+    fitness += math.sqrt((robot.getx() -robot.pos_marker[0]) **2
+                         + (robot.gety() -robot.pos_marker[1]) **2) / 100
+
+    # Reward staying alive (initially)
+    fitness += math.log2(time.time() -robot.time_marker) /10
+    
+    robot.pos_marker = [robot.getx(), robot.gety()]
+    robot.time_marker = time.time()
+    
+    return fitness
 
 while running:
 
@@ -75,24 +91,25 @@ while running:
     rewards = []
     end_sim = False
 
-    for i in range(5000):
+    for i in range(2000):
         if (not running) or end_sim: continue
 
         screen.fill("black")
 
-        state = raycast(robot)
-        state.append(robot.rel_rot())
+        state = raycast(robot, max_dist = 300)
+        state.append(robot.rel_rot() / (2*math.pi))
+        state.append(robot.getx() /display_x)
+        state.append(robot.gety() /display_y)
+        
         states.append(state)
         
         action = robot.act(state)
-
-        for m in range(len(action)):
-            action[m] += random.random() *.2
+        action = [(random.random() -.5) *.5 +a for a in action]
 
         actions.append(action)
 
         robot.set_lspeed(action[0] *.1)
-        robot.set_rspeed(action[1] *.1)
+        robot.set_rspeed(-action[1] *.1)
 
         if pygame.key.get_pressed()[pygame.K_q]: robot.l_accel(.01)
         if pygame.key.get_pressed()[pygame.K_a]: robot.l_accel(-.01)
@@ -104,18 +121,22 @@ while running:
         for a in robot.next_advances(approximation = 5):
             if collided: continue
             for o in course:
-                if o.collides(a):
+                if (o.collides(a)
+                        or not (0 <= a[0] <= display_x)
+                        or not (0 <= a[1] <= display_y)):
                     collided = True
 
         if (not collided
                 and 0 <= robot.getx() <= display_x
                 and 0 <= robot.gety() <= display_y):
             robot.apply_advances()
+            rw = fitness(robot)
         else:
             robot.collide()
             end_sim = True
+            rw = -abs(fitness(robot))
 
-        rewards.append((robot.getx() -50) /100)
+        rewards.append(rw)
 
         for o in course:
             pygame.draw.rect(screen, o.colour, o.dims())
@@ -136,9 +157,9 @@ while running:
             if event.type == pygame.QUIT:
                 running = False
 
-    print(rewards[-1])
     robot.train_step(states, actions, rewards)
-    robot.force_pos(50, display_y/2)
-    course = new_course()
+    robot.force_pos(50, 50)
+    #course = new_course()
+    print(max(rewards))
 
 pygame.quit()

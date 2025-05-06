@@ -3,15 +3,16 @@ import torch.nn as nn
 import torch.optim as optim
 
 import math
+import time
 
 class Robot(nn.Module):
     def __init__(self, x, y, sensor_count=16, width=50, drag=1.1, max_speed=.1):
         super().__init__()
-        input_layer_size = sensor_count +1
+        input_layer_size = sensor_count +3
         self.model = nn.Sequential(
-            nn.Linear(input_layer_size, 2*input_layer_size),  # Input layer: 2x outputs as inputs
+            nn.Linear(input_layer_size, input_layer_size **2),  # Input layer: 2x outputs as inputs
             nn.ReLU(),
-            nn.Linear(2*input_layer_size, 2)    # Output layer: 2 outputs (lwheel rwheel)
+            nn.Linear(input_layer_size **2, 2)    # Output layer: 2 outputs (lwheel rwheel)
             )
         self.optimizer = optim.Adam(self.parameters(), lr=.001)
         
@@ -22,6 +23,9 @@ class Robot(nn.Module):
         self.__width = width
         self.__sensor_count = sensor_count
 
+        self.pos_marker = [x, y]
+        self.time_marker = time.time()
+
     # Called throughout the timeframe
     def act(self, state):
         state = torch.tensor(state, dtype=torch.float32)
@@ -31,7 +35,7 @@ class Robot(nn.Module):
     def train_step(self, states, actions, rewards):
         # Combine lists of tensors into single tensors
         states = torch.tensor(states)
-        actions = torch.stack(actions)
+        actions = torch.tensor(actions)
         # Turn reward list into tensor
         rewards = torch.tensor(rewards)
 
@@ -39,14 +43,13 @@ class Robot(nn.Module):
         p_actions = self.model(states)
 
         # Loss measured to decline per-state error: Mean-squared error
-        loss = ((p_actions - actions) **2).mean(dim=1) * -rewards
+        loss = ((p_actions - actions) **2).mean(dim=1) * rewards
         loss = loss.mean()
 
         # Pytorch magic
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
-        
 
     def getx(self):
         return (self.__lwheel.pos[0] +self.__rwheel.pos[0])/2
@@ -70,7 +73,7 @@ class Robot(nn.Module):
     def rel_rot(self):
         rot = math.atan2(self.__lwheel.pos[1]-self.__rwheel.pos[1],
                          self.__lwheel.pos[0]-self.__rwheel.pos[0])
-        return rot / (2*math.pi)
+        return rot
     
     def next_advances(self, approximation=1):
         # Returns the positions, assuming no collision, of robot left/right/centre.
