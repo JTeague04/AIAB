@@ -6,6 +6,12 @@ import random
 import robot
 import obstacle
 
+pygame.font.init()
+font = pygame.font.SysFont('Comic Sans MS', 100)
+
+scary_image = pygame.transform.scale(pygame.image.load('rawr.jpg'), (100, 100))
+
+counter = 0
 running = True
 display_x, display_y = 1600, 1000
 cell_size = 50
@@ -15,16 +21,16 @@ robot = robot.Robot(50, 50, width=25, sensor_count = 4)
 
 def new_course():
     course = []
-    for x in range(9):     # Number of columns
+    for x in range(7):     # Number of columns
         gap_size = random.randint(100, 200)
         y_val = random.randint(0, display_y-gap_size)
 
         # Top portion of column
         course.append(obstacle.Obstacle(
-            (x+1)*150, 0, random.randint(40, 80), y_val))
+            (x+1)*200, 0, random.randint(40, 80), y_val))
         # Bottom portion of column
         course.append(obstacle.Obstacle(
-            (x+1)*150, y_val+gap_size,
+            (x+1)*200, y_val+gap_size,
             random.randint(40, 80), display_y-(y_val+gap_size)))
 
     return course
@@ -51,36 +57,37 @@ def raycast(agent, s_int = 10, max_dist = 600): # search_interval should be < mi
 
             # Expand search distance
             dist += s_int 
-            search_pos = (dist*math.cos(s_rot) +pos[0], dist*math.sin(s_rot) +pos[1])
+            search_pos = [dist*math.cos(s_rot) +pos[0], dist*math.sin(s_rot) +pos[1]]
             
             for o in course:
-                if (o.collides(search_pos)
-                        and searching
-                        and dist <= max_dist
+                if (searching and (
+                        (dist > max_dist)
+                        or o.collides(search_pos)
                         or not (0 <= search_pos[0] <= display_x)
-                        or not (0 <= search_pos[1] <= display_y)):
-                    
+                        or not (0 <= search_pos[1] <= display_y))):
                     searching = False
                     pygame.draw.rect(screen, "blue",
                                      (search_pos[0]-5, search_pos[1]-5, 10, 10))
                     
-        dists[i] = dist/max_dist
+        dists[i] = dist/ (max_dist+s_int)
+        
+        if not (-1 <= dists[i] <= 1):
+            raise Exception(f"fuck you {dist} {max_dist+s_int}")
 
     return dists
 
 def fitness(robot):
     # Reward x-progress
-    fitness = ((robot.getx()-50)/ display_x)
+    fitness = 20 *(robot.getx()-75) /display_x
 
-    # Reward velocity
-    fitness += math.sqrt((robot.getx() -robot.pos_marker[0]) **2
-                         + (robot.gety() -robot.pos_marker[1]) **2) / 100
-
-    # Reward staying alive (initially)
-    fitness += math.log2(time.time() -robot.time_marker) /10
+    # Reward distance travelled
     
-    robot.pos_marker = [robot.getx(), robot.gety()]
-    robot.time_marker = time.time()
+##    dist = math.sqrt((robot.getx()-robot.pos_marker[0]) **2 +
+##                     (robot.gety()-robot.pos_marker[1]) **2)
+##
+##    logfn = robot.getx() - robot.pos_marker[0]
+##    if logfn < 0:
+##        fitness -= math.log(abs(logfn))
     
     return fitness
 
@@ -90,10 +97,16 @@ while running:
     actions = []
     rewards = []
     end_sim = False
+    
+    robot.time_marker = time.time()
+    counter = 0
 
-    for i in range(5000):
-        if (not running) or end_sim: continue
+    rw = 0
+    last_fitness = 0
 
+    while (counter < 5000 or fitness(robot) > 5) and running and not end_sim:
+        counter += 1
+        
         screen.fill("black")
 
         state = raycast(robot, max_dist = 300)
@@ -104,12 +117,16 @@ while running:
         states.append(state)
         
         action = robot.act(state)
-        action = [(random.random() -.5) *.5 +a for a in action]
+        for i, a in enumerate(action):
+            if not (-1 <= a <= 1):
+                raise Exception(f"fuck you {i} {a}")
+
+        action = [(random.random() -.5)*.1 +a for a in action]
 
         actions.append(action)
 
-        robot.set_lspeed(action[0] *.1)
-        robot.set_rspeed(-action[1] *.1)
+        robot.set_lspeed(action[0] *1)
+        robot.set_rspeed(action[1] *1)
 
         if pygame.key.get_pressed()[pygame.K_q]: robot.l_accel(.01)
         if pygame.key.get_pressed()[pygame.K_a]: robot.l_accel(-.01)
@@ -130,13 +147,18 @@ while running:
                 and 0 <= robot.getx() <= display_x
                 and 0 <= robot.gety() <= display_y):
             robot.apply_advances()
-            rw = fitness(robot)
+            temp = last_fitness
+            last_fitness = rw
+            rw = fitness(robot) -temp
         else:
             robot.collide()
             end_sim = True
-            rw = -abs(fitness(robot))
+            rw = max(-1, -abs(fitness(robot)))
 
         rewards.append(rw)
+
+        screen.blit(scary_image, (robot.pos_marker[0]-50, robot.pos_marker[1]-50))
+
 
         for o in course:
             pygame.draw.rect(screen, o.colour, o.dims())
@@ -149,7 +171,11 @@ while running:
         pygame.draw.rect(screen, "red",
                          robot.rwheel_pos()+[5, 5])
 
-        raycast(robot)
+        render = font.render(str(round(rw, 2)), False, "white")
+        screen.blit(render, (display_x-400, display_y-200))
+
+        render = font.render(f"{counter/50}%", False, "white")
+        screen.blit(render, (display_x-400, display_y-300))
 
         pygame.display.flip()
 
